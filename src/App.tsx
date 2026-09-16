@@ -2043,7 +2043,7 @@ function ColorMemoryGame() {
         <Card>
           <div className="text-center">
             <p className="text-sm text-[var(--text-muted)] mb-2">MEMORIZE THIS COLOR</p>
-            <div className="w-full h-64 rounded-xl mb-4 animate-pulse-slow" style={{ backgroundColor: rgbToHex(target) }} />
+            <div className="w-full h-64 rounded-xl mb-4" style={{ backgroundColor: rgbToHex(target) }} />
             <p className="text-5xl font-bold animate-countdown" key={Math.floor(countdown)}>{Math.ceil(countdown)}</p>
           </div>
         </Card>
