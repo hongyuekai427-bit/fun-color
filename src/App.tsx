@@ -318,7 +318,7 @@ function HomePage() {
         <FeatureCard
           icon="🎮"
           title="Play"
-          description="Color Match, Color Memory, Color Sequence, Odd Color, and Daily Color challenges."
+          description="Color Match, Color Memory, Color Sequence, and Odd Color challenges."
           onClick={() => navigate('/games')}
         />
         <FeatureCard
@@ -1792,7 +1792,6 @@ function GamesHubPage() {
     { id: 'memory', title: 'Color Memory', desc: 'Memorize a color, then recreate it from memory', icon: '🧠' },
     { id: 'sequence', title: 'Color Sequence', desc: 'Remember and recreate a sequence of colors', icon: '🔢' },
     { id: 'odd', title: 'Odd Color', desc: 'Find the one tile that is different', icon: '🔍' },
-    { id: 'daily', title: 'Daily Color', desc: 'A new color challenge every day', icon: '📅' },
   ];
 
   return (
@@ -2343,108 +2342,6 @@ function OddColorGame() {
   );
 }
 
-// ==================== GAME: DAILY COLOR ====================
-
-function DailyColorGame() {
-  const today = new Date().toISOString().split('T')[0];
-  const [phase, setPhase] = useState<'play' | 'result'>('play');
-  const [player, setPlayer] = useState<HSL>({ h: 180, s: 50, l: 50 });
-  const [result, setResult] = useState<{ score: number; diff: ReturnType<typeof getColorDifference> } | null>(null);
-  const [pastResults, setPastResults] = useLocalStorage<Record<string, number>>('color-lab-daily-results', {});
-
-  // Deterministic daily target from date
-  const getDailyTarget = (): RGB => {
-    const seed = today.split('-').reduce((acc, n) => acc + parseInt(n), 0);
-    const h = (seed * 137.508) % 360; // Golden angle
-    const s = 30 + (seed * 7 % 50);
-    const l = 30 + (seed * 13 % 40);
-    return hslToRgb({ h, s, l });
-  };
-
-  const target = getDailyTarget();
-  const alreadyPlayed = today in pastResults;
-
-  const handleSubmit = () => {
-    const playerRgb = hslToRgb(player);
-    const d = getColorDifference(target, playerRgb);
-    setResult({ score: d.score, diff: d });
-    setPastResults({ ...pastResults, [today]: d.score });
-    setPhase('result');
-  };
-
-  const playerRgb = hslToRgb(player);
-
-  return (
-    <div className="animate-fade-in max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-2">📅 Daily Color</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-6">{today} {alreadyPlayed && '• Already played today'}</p>
-
-      {phase === 'play' && !alreadyPlayed && (
-        <Card>
-          <p className="text-[var(--text-secondary)] mb-4">Recreate today's mystery color. Everyone gets the same target!</p>
-          <div className="space-y-3 mb-6">
-            <Slider label="Hue" value={player.h} onChange={v => setPlayer({ ...player, h: v })} min={0} max={360}
-              gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-            <Slider label="Saturation" value={player.s} onChange={v => setPlayer({ ...player, s: v })} min={0} max={100} />
-            <Slider label="Lightness" value={player.l} onChange={v => setPlayer({ ...player, l: v })} min={0} max={100} />
-          </div>
-          <div className="w-full h-24 rounded-xl mb-4" style={{ backgroundColor: rgbToHex(playerRgb) }} />
-          <button onClick={handleSubmit} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium">Submit Answer</button>
-        </Card>
-      )}
-
-      {(phase === 'result' || alreadyPlayed) && result && (
-        <Card>
-          <div className="text-center mb-6">
-            <p className="text-4xl font-bold">{result.score}%</p>
-            <p className="text-[var(--text-secondary)]">Today's Score</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-xs text-[var(--text-muted)] mb-1 text-center">Target</p>
-              <div className="w-full h-20 rounded-xl" style={{ backgroundColor: rgbToHex(target) }} />
-            </div>
-            <div>
-              <p className="text-xs text-[var(--text-muted)] mb-1 text-center">Your Color</p>
-              <div className="w-full h-20 rounded-xl" style={{ backgroundColor: rgbToHex(playerRgb) }} />
-            </div>
-          </div>
-          <div className="p-3 rounded-lg bg-[var(--bg-elevated)] text-sm">
-            <p>Come back tomorrow for a new challenge!</p>
-          </div>
-        </Card>
-      )}
-
-      {alreadyPlayed && !result && (
-        <Card>
-          <p className="text-center text-[var(--text-secondary)]">You've already played today. Come back tomorrow!</p>
-          {pastResults[today] && (
-            <div className="text-center mt-4">
-              <p className="text-2xl font-bold">{pastResults[today]}%</p>
-              <p className="text-sm text-[var(--text-muted)]">Today's score</p>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Recent history */}
-      {Object.keys(pastResults).length > 0 && (
-        <Card className="mt-6">
-          <h3 className="font-semibold mb-3">Recent Results</h3>
-          <div className="space-y-2">
-            {Object.entries(pastResults).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 7).map(([date, score]) => (
-              <div key={date} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)]">
-                <span className="text-sm">{date}</span>
-                <span className="font-mono text-sm font-bold">{score}%</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 // ==================== UTILITY FUNCTIONS ====================
 
 function randomColor(): RGB {
@@ -2475,7 +2372,6 @@ export default function App() {
           <Route path="/games/memory" element={<ColorMemoryGame />} />
           <Route path="/games/sequence" element={<ColorSequenceGame />} />
           <Route path="/games/odd" element={<OddColorGame />} />
-          <Route path="/games/daily" element={<DailyColorGame />} />
           <Route path="/accessibility" element={<AccessibilityPage />} />
           <Route path="/science" element={<ColorSciencePage />} />
           <Route path="/dev" element={<DeveloperToolsPage />} />
