@@ -8,7 +8,7 @@ import {
   parseColor, contrastRatio, wcagLevel, isLightColor, getContrastText, wrapHue, clamp,
   getHarmony, getHarmonyAngles, getTints, getShades, getTones, HarmonyType,
   deltaEOK, deltaEToScore, getColorDifference,
-  simulateColorVision, extractDominantColors, cvDeficiencyLabels, CVDeficiency,
+  simulateColorVision, extractAllColors, cvDeficiencyLabels, CVDeficiency,
 } from './color';
 
 // ==================== SHARED COMPONENTS ====================
@@ -318,7 +318,7 @@ function HomePage() {
         <FeatureCard
           icon="🎮"
           title="Play"
-          description="Color Match, Color Memory, Color Sequence, Odd Color, and Daily Color challenges."
+          description="Color Match, Color Memory, Color Sequence, and Odd Color challenges."
           onClick={() => navigate('/games')}
         />
         <FeatureCard
@@ -387,34 +387,18 @@ function ColorWheelMini() {
 
 // ==================== COLOR LAB PAGE ====================
 
+type LabMode = 'HEX' | 'RGB' | 'HSL' | 'HSV' | 'OKLCH';
+
 function ColorLabPage() {
   const [hex, setHex] = useState('#6C63FF');
   const [rgb, setRgb] = useState<RGB>({ r: 108, g: 99, b: 255 });
   const [hsl, setHsl] = useState<HSL>({ h: 243, s: 100, l: 69 });
   const [hsv, setHsv] = useState<HSV>({ h: 243, s: 61, v: 100 });
   const [oklch, setOklch] = useState<OKLCH>({ l: 0.55, c: 0.22, h: 290 });
+  const [mode, setMode] = useState<LabMode>('HSL');
   const { copy, copied } = useCopyToClipboard();
 
-  const updateFromHex = (newHex: string) => {
-    const parsed = hexToRgb(newHex);
-    if (!parsed) return;
-    setHex(newHex);
-    setRgb(parsed);
-    setHsl(rgbToHsl(parsed));
-    setHsv(rgbToHsv(parsed));
-    setOklch(rgbToOklch(parsed));
-  };
-
-  const updateFromHsl = (newHsl: HSL) => {
-    const newRgb = hslToRgb(newHsl);
-    setHsl(newHsl);
-    setRgb(newRgb);
-    setHex(rgbToHex(newRgb));
-    setHsv(rgbToHsv(newRgb));
-    setOklch(rgbToOklch(newRgb));
-  };
-
-  const updateFromRgb = (newRgb: RGB) => {
+  const syncFromRgb = (newRgb: RGB) => {
     setRgb(newRgb);
     setHex(rgbToHex(newRgb));
     setHsl(rgbToHsl(newRgb));
@@ -422,39 +406,48 @@ function ColorLabPage() {
     setOklch(rgbToOklch(newRgb));
   };
 
+  const updateFromHex = (newHex: string) => {
+    const parsed = hexToRgb(newHex);
+    if (!parsed) return;
+    syncFromRgb(parsed);
+  };
+
+  const updateFromHsl = (newHsl: HSL) => syncFromRgb(hslToRgb(newHsl));
+  const updateFromHsv = (newHsv: HSV) => syncFromRgb(hsvToRgb(newHsv));
+  const updateFromOklch = (newOklch: OKLCH) => {
+    const newRgb = oklchToRgb(newOklch);
+    setOklch(newOklch);
+    setRgb(newRgb);
+    setHex(rgbToHex(newRgb));
+    setHsl(rgbToHsl(newRgb));
+    setHsv(rgbToHsv(newRgb));
+  };
+
   return (
     <div className="animate-fade-in">
       <SectionTitle subtitle="Select and manipulate colors across all color models">Color Lab</SectionTitle>
       
+      {/* Mode Selector */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {(['HEX', 'RGB', 'HSL', 'HSV', 'OKLCH'] as LabMode[]).map(m => (
+          <button key={m} onClick={() => setMode(m)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${mode === m ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]'}`}>
+            {m}
+          </button>
+        ))}
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Preview */}
+        {/* Preview + Controls */}
         <Card>
           <div className="w-full h-48 rounded-xl mb-4 relative overflow-hidden" style={{ backgroundColor: hex }}>
             <span className="absolute bottom-3 right-3 px-2 py-1 rounded text-xs font-mono bg-black/30 text-white">
               {hex.toUpperCase()}
             </span>
           </div>
-          
-          {/* HEX Input */}
+
+          {/* Native color picker always available */}
           <div className="flex items-center gap-2 mb-4">
-            <label className="text-sm font-medium text-[var(--text-secondary)]">HEX</label>
-            <input
-              type="text"
-              value={hex}
-              onChange={e => {
-                const val = e.target.value;
-                setHex(val);
-                const parsed = hexToRgb(val.startsWith('#') ? val : '#' + val);
-                if (parsed) {
-                  setRgb(parsed);
-                  setHsl(rgbToHsl(parsed));
-                  setHsv(rgbToHsv(parsed));
-                  setOklch(rgbToOklch(parsed));
-                }
-              }}
-              className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
-              aria-label="Hex color value"
-            />
             <input
               type="color"
               value={hex}
@@ -462,37 +455,86 @@ function ColorLabPage() {
               className="w-10 h-10 rounded-lg cursor-pointer border-0"
               aria-label="Color picker"
             />
+            <span className="text-sm text-[var(--text-secondary)]">Native picker</span>
           </div>
+          
+          {/* Mode-specific controls */}
+          {mode === 'HEX' && (
+            <div>
+              <label className="text-sm font-medium text-[var(--text-secondary)] mb-1 block">HEX Value</label>
+              <input
+                type="text"
+                value={hex}
+                onChange={e => {
+                  const val = e.target.value;
+                  setHex(val);
+                  const parsed = hexToRgb(val.startsWith('#') ? val : '#' + val);
+                  if (parsed) syncFromRgb(parsed);
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
+                aria-label="Hex color value"
+              />
+            </div>
+          )}
 
-          {/* HSL Sliders */}
-          <div className="space-y-3">
-            <Slider
-              label="Hue"
-              value={hsl.h}
-              onChange={v => updateFromHsl({ ...hsl, h: v })}
-              min={0} max={360}
-              gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))"
-            />
-            <Slider
-              label="Saturation"
-              value={hsl.s}
-              onChange={v => updateFromHsl({ ...hsl, s: v })}
-              min={0} max={100}
-              gradient={`linear-gradient(to right, hsl(${hsl.h},0%,${hsl.l}%), hsl(${hsl.h},100%,${hsl.l}%))`}
-            />
-            <Slider
-              label="Lightness"
-              value={hsl.l}
-              onChange={v => updateFromHsl({ ...hsl, l: v })}
-              min={0} max={100}
-              gradient={`linear-gradient(to right, hsl(${hsl.h},${hsl.s}%,0%), hsl(${hsl.h},${hsl.s}%,50%), hsl(${hsl.h},${hsl.s}%,100%))`}
-            />
-          </div>
+          {mode === 'RGB' && (
+            <div className="space-y-3">
+              <Slider label="Red (R)" value={rgb.r} onChange={v => syncFromRgb({ ...rgb, r: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(0,${rgb.g},${rgb.b}), rgb(255,${rgb.g},${rgb.b}))`} />
+              <Slider label="Green (G)" value={rgb.g} onChange={v => syncFromRgb({ ...rgb, g: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${rgb.r},0,${rgb.b}), rgb(${rgb.r},255,${rgb.b}))`} />
+              <Slider label="Blue (B)" value={rgb.b} onChange={v => syncFromRgb({ ...rgb, b: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${rgb.r},${rgb.g},0), rgb(${rgb.r},${rgb.g},255))`} />
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {(['r', 'g', 'b'] as const).map(ch => (
+                  <div key={ch}>
+                    <label className="text-xs text-[var(--text-muted)] uppercase">{ch}</label>
+                    <input type="number" min={0} max={255} value={rgb[ch]}
+                      onChange={e => syncFromRgb({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
+                      className="w-full px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
+                      aria-label={`${ch} channel`} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mode === 'HSL' && (
+            <div className="space-y-3">
+              <Slider label="Hue" value={hsl.h} onChange={v => updateFromHsl({ ...hsl, h: v })} min={0} max={360}
+                gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+              <Slider label="Saturation" value={hsl.s} onChange={v => updateFromHsl({ ...hsl, s: v })} min={0} max={100}
+                gradient={`linear-gradient(to right, hsl(${hsl.h},0%,${hsl.l}%), hsl(${hsl.h},100%,${hsl.l}%))`} />
+              <Slider label="Lightness" value={hsl.l} onChange={v => updateFromHsl({ ...hsl, l: v })} min={0} max={100}
+                gradient={`linear-gradient(to right, hsl(${hsl.h},${hsl.s}%,0%), hsl(${hsl.h},${hsl.s}%,50%), hsl(${hsl.h},${hsl.s}%,100%))`} />
+            </div>
+          )}
+
+          {mode === 'HSV' && (
+            <div className="space-y-3">
+              <Slider label="Hue" value={hsv.h} onChange={v => updateFromHsv({ ...hsv, h: v })} min={0} max={360}
+                gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+              <Slider label="Saturation" value={hsv.s} onChange={v => updateFromHsv({ ...hsv, s: v })} min={0} max={100}
+                gradient={`linear-gradient(to right, rgb(${Math.round(hsvToRgb({ ...hsv, s: 0 }).r)},${Math.round(hsvToRgb({ ...hsv, s: 0 }).g)},${Math.round(hsvToRgb({ ...hsv, s: 0 }).b)}), ${rgbToHex(hsvToRgb({ ...hsv, s: 100 }))})`} />
+              <Slider label="Value" value={hsv.v} onChange={v => updateFromHsv({ ...hsv, v: v })} min={0} max={100}
+                gradient={`linear-gradient(to right, #000000, ${rgbToHex(hsvToRgb({ ...hsv, v: 100 }))})`} />
+            </div>
+          )}
+
+          {mode === 'OKLCH' && (
+            <div className="space-y-3">
+              <Slider label="Lightness (L)" value={oklch.l * 100} onChange={v => updateFromOklch({ ...oklch, l: v / 100 })} min={0} max={100}
+                gradient="linear-gradient(to right, #000, #fff)" />
+              <Slider label="Chroma (C)" value={oklch.c * 100} onChange={v => updateFromOklch({ ...oklch, c: v / 100 })} min={0} max={40} step={0.1} />
+              <Slider label="Hue (H)" value={oklch.h} onChange={v => updateFromOklch({ ...oklch, h: v })} min={0} max={360}
+                gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+            </div>
+          )}
         </Card>
 
         {/* Values */}
         <Card>
-          <h3 className="font-semibold mb-4">Color Values</h3>
+          <h3 className="font-semibold mb-4">All Color Values</h3>
           <div className="space-y-3">
             <ValueRow label="HEX" value={hex.toUpperCase()} onCopy={() => copy(hex.toUpperCase())} copied={copied === hex.toUpperCase()} />
             <ValueRow label="RGB" value={formatRgb(rgb)} onCopy={() => copy(formatRgb(rgb))} copied={copied === formatRgb(rgb)} />
@@ -501,26 +543,6 @@ function ColorLabPage() {
             <ValueRow label="OKLCH" value={formatOklch(oklch)} onCopy={() => copy(formatOklch(oklch))} copied={copied === formatOklch(oklch)} />
             <ValueRow label="CSS" value={`color: ${hex};`} onCopy={() => copy(`color: ${hex};`)} copied={copied === `color: ${hex};`} />
             <ValueRow label="JSON" value={`{"hex":"${hex}","r":${rgb.r},"g":${rgb.g},"b":${rgb.b}}`} onCopy={() => copy(`{"hex":"${hex}","r":${rgb.r},"g":${rgb.g},"b":${rgb.b}}`)} copied={copied === `{"hex":"${hex}","r":${rgb.r},"g":${rgb.g},"b":${rgb.b}}`} />
-          </div>
-
-          {/* RGB Direct Input */}
-          <div className="mt-6">
-            <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-2">RGB Input</h4>
-            <div className="grid grid-cols-3 gap-2">
-              {(['r', 'g', 'b'] as const).map(ch => (
-                <div key={ch}>
-                  <label className="text-xs text-[var(--text-muted)] uppercase">{ch}</label>
-                  <input
-                    type="number"
-                    min={0} max={255}
-                    value={rgb[ch]}
-                    onChange={e => updateFromRgb({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
-                    className="w-full px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
-                    aria-label={`Red channel`}
-                  />
-                </div>
-              ))}
-            </div>
           </div>
         </Card>
       </div>
@@ -832,10 +854,25 @@ function PaletteLabPage() {
   const [paletteName, setPaletteName] = useState('My Palette');
   const [savedPalettes, setSavedPalettes] = useLocalStorage<Array<{ name: string; colors: RGB[] }>>('color-lab-saved-palettes', []);
   const { copy } = useCopyToClipboard();
+  const [newColorHex, setNewColorHex] = useState('#6C63FF');
+  const [newColorPicker, setNewColorPicker] = useState('#6C63FF');
 
-  const addColor = () => {
-    const randomHue = Math.random() * 360;
-    setPalette([...palette, hslToRgb({ h: randomHue, s: 70, l: 55 })]);
+  const addColor = (color?: RGB) => {
+    if (color) {
+      setPalette([...palette, color]);
+    } else {
+      const randomHue = Math.random() * 360;
+      setPalette([...palette, hslToRgb({ h: randomHue, s: 70, l: 55 })]);
+    }
+  };
+
+  const addManualColor = () => {
+    const rgb = hexToRgb(newColorHex) || hexToRgb(newColorPicker);
+    if (rgb) {
+      setPalette([...palette, rgb]);
+      setNewColorHex(rgbToHex(rgb));
+      setNewColorPicker(rgbToHex(rgb));
+    }
   };
 
   const removeColor = (i: number) => {
@@ -885,9 +922,44 @@ function PaletteLabPage() {
               className="text-lg font-semibold bg-transparent border-b border-transparent hover:border-[var(--border)] focus:border-[var(--accent)] outline-none"
               aria-label="Palette name"
             />
-            <button onClick={addColor} className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-sm">+ Add</button>
+            <button onClick={() => addColor()} className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-sm">+ Add Random</button>
           </div>
           
+          {/* Manual Color Input */}
+          <div className="mb-4 p-3 rounded-lg bg-[var(--bg-elevated)]">
+            <h4 className="text-sm font-medium mb-2">Add Color Manually</h4>
+            <div className="flex gap-2">
+              <input
+                type="color"
+                value={newColorPicker}
+                onChange={e => {
+                  setNewColorPicker(e.target.value);
+                  setNewColorHex(e.target.value);
+                }}
+                className="w-10 h-10 rounded cursor-pointer border-0"
+                aria-label="Color picker"
+              />
+              <input
+                type="text"
+                value={newColorHex}
+                onChange={e => {
+                  setNewColorHex(e.target.value);
+                  const rgb = hexToRgb(e.target.value);
+                  if (rgb) setNewColorPicker(rgbToHex(rgb));
+                }}
+                placeholder="#RRGGBB"
+                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] font-mono text-sm"
+                aria-label="Hex color value"
+              />
+              <button
+                onClick={addManualColor}
+                className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {palette.map((color, i) => (
               <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-[var(--bg-elevated)]">
@@ -994,7 +1066,7 @@ function ImagePalettePage() {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const extracted = extractDominantColors(imageData, 8);
+        const extracted = extractAllColors(imageData);
         setColors(extracted);
         setImageUrl(e.target?.result as string);
         setIsProcessing(false);
@@ -1015,16 +1087,29 @@ function ImagePalettePage() {
     if (file) processImage(file);
   };
 
+  const totalPixels = colors.reduce((sum, c) => sum + c.count, 0);
+  const [showAll, setShowAll] = useState(false);
+  const navigate = useNavigate();
+  const [savedPalette, setSavedPalette] = useLocalStorage<RGB[]>('color-lab-palette', []);
+
+  const sendToPalette = () => {
+    const topColors = colors.slice(0, 8).map(c => c.color);
+    setSavedPalette(topColors);
+    navigate('/palette');
+  };
+
+  const displayColors = showAll ? colors : colors.slice(0, 30);
+
   return (
     <div className="animate-fade-in">
-      <SectionTitle subtitle="Extract dominant colors from any image — processed locally">Image Palette Extractor</SectionTitle>
+      <SectionTitle subtitle="Extract all colors from any image — sorted by frequency, processed locally">Image Palette Extractor</SectionTitle>
       
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
           <div
             onDrop={handleDrop}
             onDragOver={e => e.preventDefault()}
-            className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:border-[var(--accent)] transition-colors cursor-pointer"
+            className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:border-[var(--accent)] transition-colors cursor-pointer relative"
           >
             {imageUrl ? (
               <img src={imageUrl} alt="Uploaded" className="max-h-64 mx-auto rounded-lg" />
@@ -1047,29 +1132,52 @@ function ImagePalettePage() {
         </Card>
 
         <Card>
-          <h3 className="font-semibold mb-4">Extracted Colors {colors.length > 0 && `(${colors.length})`}</h3>
+          <h3 className="font-semibold mb-2">Extracted Colors {colors.length > 0 && `(${colors.length} unique)`}</h3>
+          {colors.length > 0 && (
+            <p className="text-xs text-[var(--text-muted)] mb-4">Total pixels analyzed: {totalPixels.toLocaleString()}</p>
+          )}
           {isProcessing && <p className="text-[var(--text-secondary)]">Processing image...</p>}
           {colors.length > 0 && (
-            <div className="space-y-3">
-              {colors.map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg flex-shrink-0" style={{ backgroundColor: rgbToHex(item.color) }} />
-                  <div className="flex-1">
-                    <span className="font-mono text-sm">{rgbToHex(item.color).toUpperCase()}</span>
-                    <div className="w-full h-2 rounded bg-[var(--bg-elevated)] mt-1">
-                      <div className="h-full rounded" style={{ width: `${(item.count / colors[0].count) * 100}%`, backgroundColor: rgbToHex(item.color) }} />
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+              {displayColors.map((item, i) => {
+                const pct = ((item.count / totalPixels) * 100);
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors">
+                    <div className="w-10 h-10 rounded-lg flex-shrink-0 border border-[var(--border)]" style={{ backgroundColor: rgbToHex(item.color) }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{rgbToHex(item.color).toUpperCase()}</span>
+                        <span className="text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded bg-[var(--bg-elevated)] mt-1">
+                        <div className="h-full rounded" style={{ width: `${Math.max(pct, 0.5)}%`, backgroundColor: rgbToHex(item.color) }} />
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <span className="text-xs text-[var(--text-muted)] w-16 text-right font-mono">{item.count.toLocaleString()}px</span>
+                      <button onClick={() => copy(rgbToHex(item.color))} className="text-xs px-2 py-1 rounded hover:bg-[var(--border)]" aria-label="Copy hex">📋</button>
                     </div>
                   </div>
-                  <button onClick={() => copy(rgbToHex(item.color))} className="text-xs px-2 py-1 rounded hover:bg-[var(--border)]" aria-label="Copy">📋</button>
-                </div>
-              ))}
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => copy(colors.map(c => rgbToHex(c.color)).join('\n'))} className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm">Copy All</button>
-              </div>
+                );
+              })}
+            </div>
+          )}
+          {colors.length > 30 && (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="mt-3 w-full py-2 rounded-lg bg-[var(--bg-elevated)] text-sm text-[var(--text-secondary)] hover:bg-[var(--border)] transition-colors"
+            >
+              {showAll ? `Show top 30` : `Show all ${colors.length} colors`}
+            </button>
+          )}
+          {colors.length > 0 && (
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => copy(colors.map(c => rgbToHex(c.color)).join('\n'))} className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm hover:bg-[var(--border)]">Copy All HEX</button>
+              <button onClick={sendToPalette} className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white text-sm">Send Top 8 to Palette →</button>
             </div>
           )}
           {colors.length === 0 && !isProcessing && (
-            <p className="text-[var(--text-muted)]">Upload an image to extract its dominant colors.</p>
+            <p className="text-[var(--text-muted)]">Upload an image to extract all its colors, sorted by frequency.</p>
           )}
         </Card>
       </div>
@@ -1170,12 +1278,13 @@ function ColorTheoryPage() {
                 <div className="space-y-4 mt-6">
                   <Slider label="Lightness" value={demoLight} onChange={setDemoLight} min={0} max={100} />
                   <div className="flex gap-1 rounded-xl overflow-hidden h-24">
-                    {[10, 25, 40, 55, 70, 85].map(l => (
-                      <div key={l} className="flex-1 flex items-center justify-center" style={{ backgroundColor: `hsl(${demoHue}, ${demoSat}%, ${l}%)` }}>
-                        <span className="text-xs font-mono" style={{ color: getContrastText(hslToRgb({ h: demoHue, s: demoSat, l })) }}>{l}%</span>
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(l => (
+                      <div key={l} className={`flex-1 flex items-center justify-center ${Math.abs(l - demoLight) < 5 ? 'ring-2 ring-white' : ''}`} style={{ backgroundColor: `hsl(${demoHue}, ${demoSat}%, ${l}%)` }}>
+                        <span className="text-[9px] font-mono" style={{ color: getContrastText(hslToRgb({ h: demoHue, s: demoSat, l })) }}>{l}%</span>
                       </div>
                     ))}
                   </div>
+                  <p className="text-xs text-[var(--text-muted)]">Current: {demoLight}% (highlighted)</p>
                 </div>
               </div>
             )}
@@ -1205,12 +1314,22 @@ function ColorTheoryPage() {
                 <p className="text-[var(--text-secondary)] mb-4">
                   A tint is created by mixing a color with white. This increases lightness while reducing saturation. Tints are lighter, softer versions of a color.
                 </p>
-                <div className="flex gap-1 rounded-xl overflow-hidden h-20 mt-4">
-                  {getTints(baseRgb, 8).map((c, i) => (
-                    <div key={i} className="flex-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)} />
-                  ))}
+                <div className="space-y-3 mt-4">
+                  <div className="flex gap-2 items-center">
+                    <label className="text-sm text-[var(--text-secondary)] w-24">Base hue:</label>
+                    <input type="range" min={0} max={360} value={demoHue} onChange={e => setDemoHue(parseFloat(e.target.value))} className="flex-1" aria-label="Tint base hue" />
+                  </div>
+                  <div className="w-full h-16 rounded-lg mb-2" style={{ backgroundColor: `hsl(${demoHue}, 80%, 50%)` }} />
+                  <p className="text-xs text-[var(--text-muted)] mb-2">Base color → mixed with increasing amounts of white:</p>
+                  <div className="flex gap-1 rounded-xl overflow-hidden h-20">
+                    {getTints(hslToRgb({ h: demoHue, s: 80, l: 50 }), 8).map((c, i) => (
+                      <div key={i} className="flex-1 flex items-end justify-center pb-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)}>
+                        <span className="text-[8px] font-mono" style={{ color: getContrastText(c) }}>{Math.round((i / 7) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">← Pure color (0% white) ——— Increasing white ——— Mostly white (100%) →</p>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-2">← Pure color mixed with white →</p>
               </div>
             )}
 
@@ -1220,12 +1339,18 @@ function ColorTheoryPage() {
                 <p className="text-[var(--text-secondary)] mb-4">
                   A shade is created by mixing a color with black. This decreases lightness while maintaining hue character. Shades are darker, deeper versions of a color.
                 </p>
-                <div className="flex gap-1 rounded-xl overflow-hidden h-20 mt-4">
-                  {getShades(baseRgb, 8).map((c, i) => (
-                    <div key={i} className="flex-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)} />
-                  ))}
+                <div className="space-y-3 mt-4">
+                  <div className="w-full h-16 rounded-lg" style={{ backgroundColor: `hsl(${demoHue}, 80%, 50%)` }} />
+                  <p className="text-xs text-[var(--text-muted)] mb-2">Base color → mixed with increasing amounts of black:</p>
+                  <div className="flex gap-1 rounded-xl overflow-hidden h-20">
+                    {getShades(hslToRgb({ h: demoHue, s: 80, l: 50 }), 8).map((c, i) => (
+                      <div key={i} className="flex-1 flex items-end justify-center pb-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)}>
+                        <span className="text-[8px] font-mono" style={{ color: getContrastText(c) }}>{Math.round((i / 7) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">← Pure color (0% black) ——— Increasing black ——— Mostly black (100%) →</p>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-2">← Pure color mixed with black →</p>
               </div>
             )}
 
@@ -1238,12 +1363,18 @@ function ColorTheoryPage() {
                 <p className="text-[var(--text-secondary)] mb-4">
                   <strong>Distinction:</strong> Tint = color + white. Shade = color + black. Tone = color + gray. The key difference is that tones reduce chroma without drastically shifting lightness.
                 </p>
-                <div className="flex gap-1 rounded-xl overflow-hidden h-20 mt-4">
-                  {getTones(baseRgb, 8).map((c, i) => (
-                    <div key={i} className="flex-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)} />
-                  ))}
+                <div className="space-y-3 mt-4">
+                  <div className="w-full h-16 rounded-lg" style={{ backgroundColor: `hsl(${demoHue}, 80%, 50%)` }} />
+                  <p className="text-xs text-[var(--text-muted)] mb-2">Base color → mixed with increasing amounts of gray:</p>
+                  <div className="flex gap-1 rounded-xl overflow-hidden h-20">
+                    {getTones(hslToRgb({ h: demoHue, s: 80, l: 50 }), 8).map((c, i) => (
+                      <div key={i} className="flex-1 flex items-end justify-center pb-1" style={{ backgroundColor: rgbToHex(c) }} title={rgbToHex(c)}>
+                        <span className="text-[8px] font-mono" style={{ color: getContrastText(c) }}>{Math.round((i / 7) * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--text-muted)]">← Pure color (0% gray) ——— Increasing gray ——— Mostly gray (100%) →</p>
                 </div>
-                <p className="text-xs text-[var(--text-muted)] mt-2">← Pure color mixed with gray →</p>
               </div>
             )}
 
@@ -1792,7 +1923,6 @@ function GamesHubPage() {
     { id: 'memory', title: 'Color Memory', desc: 'Memorize a color, then recreate it from memory', icon: '🧠' },
     { id: 'sequence', title: 'Color Sequence', desc: 'Remember and recreate a sequence of colors', icon: '🔢' },
     { id: 'odd', title: 'Odd Color', desc: 'Find the one tile that is different', icon: '🔍' },
-    { id: 'daily', title: 'Daily Color', desc: 'A new color challenge every day', icon: '📅' },
   ];
 
   return (
@@ -1817,14 +1947,17 @@ function GamesHubPage() {
 
 // ==================== GAME: COLOR MATCH ====================
 
+type GameControlMode = 'HSL' | 'RGB' | 'HSV';
+
 function ColorMatchGame() {
+  const [started, setStarted] = useState(false);
+  const [controlMode, setControlMode] = useState<GameControlMode>('HSL');
   const [target, setTarget] = useState<RGB>(() => randomColor());
-  const [player, setPlayer] = useState<HSL>({ h: 180, s: 50, l: 50 });
+  const [playerRgb, setPlayerRgb] = useState<RGB>({ r: 128, g: 128, b: 128 });
   const [submitted, setSubmitted] = useState(false);
   const [scores, setScores] = useLocalStorage<number[]>('color-lab-match-scores', []);
   const [round, setRound] = useState(1);
 
-  const playerRgb = hslToRgb(player);
   const diff = submitted ? getColorDifference(target, playerRgb) : null;
 
   const handleSubmit = () => {
@@ -1836,16 +1969,47 @@ function ColorMatchGame() {
 
   const handleNext = () => {
     setTarget(randomColor());
-    setPlayer({ h: 180, s: 50, l: 50 });
+    setPlayerRgb({ r: 128, g: 128, b: 128 });
     setSubmitted(false);
     setRound(r => r + 1);
   };
+
+  if (!started) {
+    return (
+      <div className="animate-fade-in max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold mb-6">🎯 Color Match</h2>
+        <Card>
+          <p className="text-[var(--text-secondary)] mb-6">Recreate the target color as closely as you can using your preferred color model.</p>
+          <div className="mb-6">
+            <p className="text-sm font-medium mb-3">Control Mode</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(['HSL', 'RGB', 'HSV'] as GameControlMode[]).map(m => (
+                <button key={m} onClick={() => setControlMode(m)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${controlMode === m ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--border)]'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-2">
+              {controlMode === 'HSL' && 'Hue, Saturation, Lightness — intuitive for most people'}
+              {controlMode === 'RGB' && 'Red, Green, Blue — additive color channels'}
+              {controlMode === 'HSV' && 'Hue, Saturation, Value — brightness-based model'}
+            </p>
+          </div>
+          <button onClick={() => setStarted(true)} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium">Start Game</button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">🎯 Color Match</h2>
-        <span className="text-sm text-[var(--text-muted)]">Round {round}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs px-2 py-1 rounded bg-[var(--bg-elevated)] text-[var(--text-muted)]">{controlMode}</span>
+          <span className="text-sm text-[var(--text-muted)]">Round {round}</span>
+        </div>
       </div>
 
       {!submitted ? (
@@ -1863,12 +2027,40 @@ function ColorMatchGame() {
             </div>
           </div>
 
-          <div className="space-y-3 mb-6">
-            <Slider label="Hue" value={player.h} onChange={v => setPlayer({ ...player, h: v })} min={0} max={360}
-              gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-            <Slider label="Saturation" value={player.s} onChange={v => setPlayer({ ...player, s: v })} min={0} max={100} />
-            <Slider label="Lightness" value={player.l} onChange={v => setPlayer({ ...player, l: v })} min={0} max={100} />
-          </div>
+          {controlMode === 'HSL' && (() => {
+            const hsl = rgbToHsl(playerRgb);
+            return (
+              <div className="space-y-3 mb-6">
+                <Slider label="Hue" value={hsl.h} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
+                  gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+                <Slider label="Saturation" value={hsl.s} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
+                <Slider label="Lightness" value={hsl.l} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
+              </div>
+            );
+          })()}
+
+          {controlMode === 'RGB' && (
+            <div className="space-y-3 mb-6">
+              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setPlayerRgb({ ...playerRgb, r: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(0,${playerRgb.g},${playerRgb.b}), rgb(255,${playerRgb.g},${playerRgb.b}))`} />
+              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setPlayerRgb({ ...playerRgb, g: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${playerRgb.r},0,${playerRgb.b}), rgb(${playerRgb.r},255,${playerRgb.b}))`} />
+              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setPlayerRgb({ ...playerRgb, b: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${playerRgb.r},${playerRgb.g},0), rgb(${playerRgb.r},${playerRgb.g},255))`} />
+            </div>
+          )}
+
+          {controlMode === 'HSV' && (() => {
+            const hsv = rgbToHsv(playerRgb);
+            return (
+              <div className="space-y-3 mb-6">
+                <Slider label="Hue" value={hsv.h} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
+                  gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+                <Slider label="Saturation" value={hsv.s} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
+                <Slider label="Value" value={hsv.v} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
+              </div>
+            );
+          })()}
 
           <button onClick={handleSubmit} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium hover:opacity-90 transition-opacity">
             Lock In
@@ -1930,8 +2122,9 @@ type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 function ColorMemoryGame() {
   const [phase, setPhase] = useState<MemoryPhase>('idle');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [controlMode, setControlMode] = useState<GameControlMode>('HSL');
   const [target, setTarget] = useState<RGB>({ r: 128, g: 128, b: 128 });
-  const [player, setPlayer] = useState<HSL>({ h: 180, s: 50, l: 50 });
+  const [playerRgb, setPlayerRgb] = useState<RGB>({ r: 128, g: 128, b: 128 });
   const [countdown, setCountdown] = useState(3);
   const [round, setRound] = useState(1);
   const [totalRounds] = useState(5);
@@ -1986,7 +2179,6 @@ function ColorMemoryGame() {
   }, []);
 
   const handleLockIn = () => {
-    const playerRgb = hslToRgb(player);
     const d = getColorDifference(target, playerRgb);
     setDiff(d);
     setRoundScores([...roundScores, d.score]);
@@ -2001,12 +2193,11 @@ function ColorMemoryGame() {
     } else {
       const t = generateTarget();
       setRound(r => r + 1);
-      setPlayer({ h: 180, s: 50, l: 50 });
+      setPlayerRgb({ r: 128, g: 128, b: 128 });
       startLookPhase(t);
     }
   };
 
-  const playerRgb = hslToRgb(player);
   const avgScore = roundScores.length > 0 ? Math.round(roundScores.reduce((a, b) => a + b, 0) / roundScores.length * 10) / 10 : 0;
 
   return (
@@ -2035,6 +2226,22 @@ function ColorMemoryGame() {
               {difficultyConfig[difficulty].time}s viewing time • {difficulty === 'easy' ? 'vivid colors' : difficulty === 'normal' ? 'mixed colors' : difficulty === 'hard' ? 'subtle colors' : 'very subtle colors'}
             </p>
           </div>
+          <div className="mb-6">
+            <p className="text-sm font-medium mb-2">Control Mode</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(['HSL', 'RGB', 'HSV'] as GameControlMode[]).map(m => (
+                <button key={m} onClick={() => setControlMode(m)}
+                  className={`px-4 py-3 rounded-lg text-sm font-medium transition-colors ${controlMode === m ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-[var(--border)]'}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-2">
+              {controlMode === 'HSL' && 'Hue, Saturation, Lightness — intuitive for most people'}
+              {controlMode === 'RGB' && 'Red, Green, Blue — additive color channels'}
+              {controlMode === 'HSV' && 'Hue, Saturation, Value — brightness-based model'}
+            </p>
+          </div>
           <button onClick={startGame} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium hover:opacity-90">
             Start Game
           </button>
@@ -2060,12 +2267,42 @@ function ColorMemoryGame() {
         <Card>
           <p className="text-sm text-[var(--text-muted)] mb-4 text-center">RECREATE THE COLOR</p>
           <div className="w-full h-40 rounded-xl mb-4" style={{ backgroundColor: rgbToHex(playerRgb) }} />
-          <div className="space-y-3 mb-6">
-            <Slider label="Hue" value={player.h} onChange={v => setPlayer({ ...player, h: v })} min={0} max={360}
-              gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-            <Slider label="Saturation" value={player.s} onChange={v => setPlayer({ ...player, s: v })} min={0} max={100} />
-            <Slider label="Lightness" value={player.l} onChange={v => setPlayer({ ...player, l: v })} min={0} max={100} />
-          </div>
+          
+          {controlMode === 'HSL' && (() => {
+            const hsl = rgbToHsl(playerRgb);
+            return (
+              <div className="space-y-3 mb-6">
+                <Slider label="Hue" value={hsl.h} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
+                  gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+                <Slider label="Saturation" value={hsl.s} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
+                <Slider label="Lightness" value={hsl.l} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
+              </div>
+            );
+          })()}
+
+          {controlMode === 'RGB' && (
+            <div className="space-y-3 mb-6">
+              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setPlayerRgb({ ...playerRgb, r: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(0,${playerRgb.g},${playerRgb.b}), rgb(255,${playerRgb.g},${playerRgb.b}))`} />
+              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setPlayerRgb({ ...playerRgb, g: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${playerRgb.r},0,${playerRgb.b}), rgb(${playerRgb.r},255,${playerRgb.b}))`} />
+              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setPlayerRgb({ ...playerRgb, b: v })} min={0} max={255}
+                gradient={`linear-gradient(to right, rgb(${playerRgb.r},${playerRgb.g},0), rgb(${playerRgb.r},${playerRgb.g},255))`} />
+            </div>
+          )}
+
+          {controlMode === 'HSV' && (() => {
+            const hsv = rgbToHsv(playerRgb);
+            return (
+              <div className="space-y-3 mb-6">
+                <Slider label="Hue" value={hsv.h} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
+                  gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
+                <Slider label="Saturation" value={hsv.s} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
+                <Slider label="Value" value={hsv.v} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
+              </div>
+            );
+          })()}
+
           <button onClick={handleLockIn} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium">Lock In</button>
         </Card>
       )}
@@ -2343,108 +2580,6 @@ function OddColorGame() {
   );
 }
 
-// ==================== GAME: DAILY COLOR ====================
-
-function DailyColorGame() {
-  const today = new Date().toISOString().split('T')[0];
-  const [phase, setPhase] = useState<'play' | 'result'>('play');
-  const [player, setPlayer] = useState<HSL>({ h: 180, s: 50, l: 50 });
-  const [result, setResult] = useState<{ score: number; diff: ReturnType<typeof getColorDifference> } | null>(null);
-  const [pastResults, setPastResults] = useLocalStorage<Record<string, number>>('color-lab-daily-results', {});
-
-  // Deterministic daily target from date
-  const getDailyTarget = (): RGB => {
-    const seed = today.split('-').reduce((acc, n) => acc + parseInt(n), 0);
-    const h = (seed * 137.508) % 360; // Golden angle
-    const s = 30 + (seed * 7 % 50);
-    const l = 30 + (seed * 13 % 40);
-    return hslToRgb({ h, s, l });
-  };
-
-  const target = getDailyTarget();
-  const alreadyPlayed = today in pastResults;
-
-  const handleSubmit = () => {
-    const playerRgb = hslToRgb(player);
-    const d = getColorDifference(target, playerRgb);
-    setResult({ score: d.score, diff: d });
-    setPastResults({ ...pastResults, [today]: d.score });
-    setPhase('result');
-  };
-
-  const playerRgb = hslToRgb(player);
-
-  return (
-    <div className="animate-fade-in max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold mb-2">📅 Daily Color</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-6">{today} {alreadyPlayed && '• Already played today'}</p>
-
-      {phase === 'play' && !alreadyPlayed && (
-        <Card>
-          <p className="text-[var(--text-secondary)] mb-4">Recreate today's mystery color. Everyone gets the same target!</p>
-          <div className="space-y-3 mb-6">
-            <Slider label="Hue" value={player.h} onChange={v => setPlayer({ ...player, h: v })} min={0} max={360}
-              gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-            <Slider label="Saturation" value={player.s} onChange={v => setPlayer({ ...player, s: v })} min={0} max={100} />
-            <Slider label="Lightness" value={player.l} onChange={v => setPlayer({ ...player, l: v })} min={0} max={100} />
-          </div>
-          <div className="w-full h-24 rounded-xl mb-4" style={{ backgroundColor: rgbToHex(playerRgb) }} />
-          <button onClick={handleSubmit} className="w-full py-3 rounded-xl bg-[var(--accent)] text-white font-medium">Submit Answer</button>
-        </Card>
-      )}
-
-      {(phase === 'result' || alreadyPlayed) && result && (
-        <Card>
-          <div className="text-center mb-6">
-            <p className="text-4xl font-bold">{result.score}%</p>
-            <p className="text-[var(--text-secondary)]">Today's Score</p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <p className="text-xs text-[var(--text-muted)] mb-1 text-center">Target</p>
-              <div className="w-full h-20 rounded-xl" style={{ backgroundColor: rgbToHex(target) }} />
-            </div>
-            <div>
-              <p className="text-xs text-[var(--text-muted)] mb-1 text-center">Your Color</p>
-              <div className="w-full h-20 rounded-xl" style={{ backgroundColor: rgbToHex(playerRgb) }} />
-            </div>
-          </div>
-          <div className="p-3 rounded-lg bg-[var(--bg-elevated)] text-sm">
-            <p>Come back tomorrow for a new challenge!</p>
-          </div>
-        </Card>
-      )}
-
-      {alreadyPlayed && !result && (
-        <Card>
-          <p className="text-center text-[var(--text-secondary)]">You've already played today. Come back tomorrow!</p>
-          {pastResults[today] && (
-            <div className="text-center mt-4">
-              <p className="text-2xl font-bold">{pastResults[today]}%</p>
-              <p className="text-sm text-[var(--text-muted)]">Today's score</p>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Recent history */}
-      {Object.keys(pastResults).length > 0 && (
-        <Card className="mt-6">
-          <h3 className="font-semibold mb-3">Recent Results</h3>
-          <div className="space-y-2">
-            {Object.entries(pastResults).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 7).map(([date, score]) => (
-              <div key={date} className="flex justify-between items-center p-2 rounded bg-[var(--bg-elevated)]">
-                <span className="text-sm">{date}</span>
-                <span className="font-mono text-sm font-bold">{score}%</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-    </div>
-  );
-}
-
 // ==================== UTILITY FUNCTIONS ====================
 
 function randomColor(): RGB {
@@ -2475,7 +2610,6 @@ export default function App() {
           <Route path="/games/memory" element={<ColorMemoryGame />} />
           <Route path="/games/sequence" element={<ColorSequenceGame />} />
           <Route path="/games/odd" element={<OddColorGame />} />
-          <Route path="/games/daily" element={<DailyColorGame />} />
           <Route path="/accessibility" element={<AccessibilityPage />} />
           <Route path="/science" element={<ColorSciencePage />} />
           <Route path="/dev" element={<DeveloperToolsPage />} />

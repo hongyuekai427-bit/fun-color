@@ -62,15 +62,15 @@ export const cvDeficiencyLabels: Record<CVDeficiency, string> = {
   achromatopsia: 'Achromatopsia (Total)',
 };
 
-// Extract dominant colors from image data
-export function extractDominantColors(imageData: ImageData, numColors: number = 8): { color: RGB; count: number }[] {
+// Extract all colors from image data, sorted by frequency
+export function extractAllColors(imageData: ImageData): { color: RGB; count: number }[] {
   const data = imageData.data;
   const colorMap = new Map<string, { color: RGB; count: number }>();
   
-  // Quantize colors to reduce palette
-  const quantize = (v: number) => Math.round(v / 32) * 32;
+  // Quantize colors to reduce palette (group similar colors)
+  const quantize = (v: number) => Math.round(v / 16) * 16;
   
-  for (let i = 0; i < data.length; i += 16) { // Sample every 4th pixel
+  for (let i = 0; i < data.length; i += 4) { // Process every pixel
     const r = quantize(data[i]);
     const g = quantize(data[i + 1]);
     const b = quantize(data[i + 2]);
@@ -87,10 +87,9 @@ export function extractDominantColors(imageData: ImageData, numColors: number = 
     }
   }
   
-  // Sort by frequency and return top N
+  // Sort by frequency (most common first)
   const sorted = Array.from(colorMap.values())
-    .sort((a, b) => b.count - a.count)
-    .slice(0, numColors);
+    .sort((a, b) => b.count - a.count);
   
   return sorted;
 }
