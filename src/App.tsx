@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HashRouter, Routes, Route, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme, useLocalStorage, useCopyToClipboard } from './hooks';
+import { useGlobalColor } from './GlobalColorContext';
 import {
   RGB, HSL, HSV, OKLCH,
   hexToRgb, rgbToHex, rgbToHsl, hslToRgb, rgbToHsv, hsvToRgb,
@@ -390,38 +391,18 @@ function ColorWheelMini() {
 type LabMode = 'HEX' | 'RGB' | 'HSL' | 'HSV' | 'OKLCH';
 
 function ColorLabPage() {
-  const [hex, setHex] = useState('#6C63FF');
-  const [rgb, setRgb] = useState<RGB>({ r: 108, g: 99, b: 255 });
-  const [hsl, setHsl] = useState<HSL>({ h: 243, s: 100, l: 69 });
-  const [hsv, setHsv] = useState<HSV>({ h: 243, s: 61, v: 100 });
-  const [oklch, setOklch] = useState<OKLCH>({ l: 0.55, c: 0.22, h: 290 });
+  const { color, setColor, setFromHex, setFromHsl, setFromHsv, setFromOklch } = useGlobalColor();
+  const { hex, rgb, hsl, hsv, oklch } = color;
   const [mode, setMode] = useState<LabMode>('HSL');
   const { copy, copied } = useCopyToClipboard();
 
-  const syncFromRgb = (newRgb: RGB) => {
-    setRgb(newRgb);
-    setHex(rgbToHex(newRgb));
-    setHsl(rgbToHsl(newRgb));
-    setHsv(rgbToHsv(newRgb));
-    setOklch(rgbToOklch(newRgb));
-  };
-
   const updateFromHex = (newHex: string) => {
-    const parsed = hexToRgb(newHex);
-    if (!parsed) return;
-    syncFromRgb(parsed);
+    setFromHex(newHex);
   };
 
-  const updateFromHsl = (newHsl: HSL) => syncFromRgb(hslToRgb(newHsl));
-  const updateFromHsv = (newHsv: HSV) => syncFromRgb(hsvToRgb(newHsv));
-  const updateFromOklch = (newOklch: OKLCH) => {
-    const newRgb = oklchToRgb(newOklch);
-    setOklch(newOklch);
-    setRgb(newRgb);
-    setHex(rgbToHex(newRgb));
-    setHsl(rgbToHsl(newRgb));
-    setHsv(rgbToHsv(newRgb));
-  };
+  const updateFromHsl = (newHsl: HSL) => setFromHsl(newHsl);
+  const updateFromHsv = (newHsv: HSV) => setFromHsv(newHsv);
+  const updateFromOklch = (newOklch: OKLCH) => setFromOklch(newOklch);
 
   return (
     <div className="animate-fade-in">
@@ -467,9 +448,8 @@ function ColorLabPage() {
                 value={hex}
                 onChange={e => {
                   const val = e.target.value;
-                  setHex(val);
-                  const parsed = hexToRgb(val.startsWith('#') ? val : '#' + val);
-                  if (parsed) syncFromRgb(parsed);
+                  const hexVal = val.startsWith('#') ? val : '#' + val;
+                  setFromHex(hexVal);
                 }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
                 aria-label="Hex color value"
@@ -479,18 +459,18 @@ function ColorLabPage() {
 
           {mode === 'RGB' && (
             <div className="space-y-3">
-              <Slider label="Red (R)" value={rgb.r} onChange={v => syncFromRgb({ ...rgb, r: v })} min={0} max={255}
+              <Slider label="Red (R)" value={rgb.r} onChange={v => setColor({ ...rgb, r: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(0,${rgb.g},${rgb.b}), rgb(255,${rgb.g},${rgb.b}))`} />
-              <Slider label="Green (G)" value={rgb.g} onChange={v => syncFromRgb({ ...rgb, g: v })} min={0} max={255}
+              <Slider label="Green (G)" value={rgb.g} onChange={v => setColor({ ...rgb, g: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${rgb.r},0,${rgb.b}), rgb(${rgb.r},255,${rgb.b}))`} />
-              <Slider label="Blue (B)" value={rgb.b} onChange={v => syncFromRgb({ ...rgb, b: v })} min={0} max={255}
+              <Slider label="Blue (B)" value={rgb.b} onChange={v => setColor({ ...rgb, b: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${rgb.r},${rgb.g},0), rgb(${rgb.r},${rgb.g},255))`} />
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {(['r', 'g', 'b'] as const).map(ch => (
                   <div key={ch}>
                     <label className="text-xs text-[var(--text-muted)] uppercase">{ch}</label>
                     <input type="number" min={0} max={255} value={rgb[ch]}
-                      onChange={e => syncFromRgb({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
+                      onChange={e => setColor({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
                       className="w-full px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
                       aria-label={`${ch} channel`} />
                   </div>
@@ -1950,14 +1930,15 @@ function GamesHubPage() {
 type GameControlMode = 'HSL' | 'RGB' | 'HSV';
 
 function ColorMatchGame() {
+  const { color, setColor } = useGlobalColor();
   const [started, setStarted] = useState(false);
   const [controlMode, setControlMode] = useState<GameControlMode>('HSL');
   const [target, setTarget] = useState<RGB>(() => randomColor());
-  const [playerRgb, setPlayerRgb] = useState<RGB>({ r: 128, g: 128, b: 128 });
   const [submitted, setSubmitted] = useState(false);
   const [scores, setScores] = useLocalStorage<number[]>('color-lab-match-scores', []);
   const [round, setRound] = useState(1);
 
+  const playerRgb = color.rgb;
   const diff = submitted ? getColorDifference(target, playerRgb) : null;
 
   const handleSubmit = () => {
@@ -1969,7 +1950,7 @@ function ColorMatchGame() {
 
   const handleNext = () => {
     setTarget(randomColor());
-    setPlayerRgb({ r: 128, g: 128, b: 128 });
+    setColor({ r: 128, g: 128, b: 128 });
     setSubmitted(false);
     setRound(r => r + 1);
   };
@@ -2031,21 +2012,21 @@ function ColorMatchGame() {
             const hsl = rgbToHsl(playerRgb);
             return (
               <div className="space-y-3 mb-6">
-                <Slider label="Hue" value={hsl.h} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
+                <Slider label="Hue" value={hsl.h} onChange={v => setColor(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
                   gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-                <Slider label="Saturation" value={hsl.s} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
-                <Slider label="Lightness" value={hsl.l} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
+                <Slider label="Saturation" value={hsl.s} onChange={v => setColor(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
+                <Slider label="Lightness" value={hsl.l} onChange={v => setColor(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
               </div>
             );
           })()}
 
           {controlMode === 'RGB' && (
             <div className="space-y-3 mb-6">
-              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setPlayerRgb({ ...playerRgb, r: v })} min={0} max={255}
+              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setColor({ ...playerRgb, r: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(0,${playerRgb.g},${playerRgb.b}), rgb(255,${playerRgb.g},${playerRgb.b}))`} />
-              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setPlayerRgb({ ...playerRgb, g: v })} min={0} max={255}
+              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setColor({ ...playerRgb, g: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${playerRgb.r},0,${playerRgb.b}), rgb(${playerRgb.r},255,${playerRgb.b}))`} />
-              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setPlayerRgb({ ...playerRgb, b: v })} min={0} max={255}
+              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setColor({ ...playerRgb, b: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${playerRgb.r},${playerRgb.g},0), rgb(${playerRgb.r},${playerRgb.g},255))`} />
             </div>
           )}
@@ -2054,10 +2035,10 @@ function ColorMatchGame() {
             const hsv = rgbToHsv(playerRgb);
             return (
               <div className="space-y-3 mb-6">
-                <Slider label="Hue" value={hsv.h} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
+                <Slider label="Hue" value={hsv.h} onChange={v => setColor(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
                   gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-                <Slider label="Saturation" value={hsv.s} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
-                <Slider label="Value" value={hsv.v} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
+                <Slider label="Saturation" value={hsv.s} onChange={v => setColor(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
+                <Slider label="Value" value={hsv.v} onChange={v => setColor(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
               </div>
             );
           })()}
@@ -2120,11 +2101,11 @@ type MemoryPhase = 'idle' | 'look' | 'recreate' | 'reveal';
 type Difficulty = 'easy' | 'normal' | 'hard' | 'expert';
 
 function ColorMemoryGame() {
+  const { color, setColor } = useGlobalColor();
   const [phase, setPhase] = useState<MemoryPhase>('idle');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [controlMode, setControlMode] = useState<GameControlMode>('HSL');
   const [target, setTarget] = useState<RGB>({ r: 128, g: 128, b: 128 });
-  const [playerRgb, setPlayerRgb] = useState<RGB>({ r: 128, g: 128, b: 128 });
   const [countdown, setCountdown] = useState(3);
   const [round, setRound] = useState(1);
   const [totalRounds] = useState(5);
@@ -2132,6 +2113,7 @@ function ColorMemoryGame() {
   const [roundScores, setRoundScores] = useState<number[]>([]);
   const [diff, setDiff] = useState<ReturnType<typeof getColorDifference> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const playerRgb = color.rgb;
 
   const difficultyConfig = {
     easy: { time: 5, satRange: [40, 90] as [number, number], label: 'Easy' },
@@ -2193,7 +2175,7 @@ function ColorMemoryGame() {
     } else {
       const t = generateTarget();
       setRound(r => r + 1);
-      setPlayerRgb({ r: 128, g: 128, b: 128 });
+      setColor({ r: 128, g: 128, b: 128 });
       startLookPhase(t);
     }
   };
@@ -2272,21 +2254,21 @@ function ColorMemoryGame() {
             const hsl = rgbToHsl(playerRgb);
             return (
               <div className="space-y-3 mb-6">
-                <Slider label="Hue" value={hsl.h} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
+                <Slider label="Hue" value={hsl.h} onChange={v => setColor(hslToRgb({ ...hsl, h: v }))} min={0} max={360}
                   gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-                <Slider label="Saturation" value={hsl.s} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
-                <Slider label="Lightness" value={hsl.l} onChange={v => setPlayerRgb(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
+                <Slider label="Saturation" value={hsl.s} onChange={v => setColor(hslToRgb({ ...hsl, s: v }))} min={0} max={100} />
+                <Slider label="Lightness" value={hsl.l} onChange={v => setColor(hslToRgb({ ...hsl, l: v }))} min={0} max={100} />
               </div>
             );
           })()}
 
           {controlMode === 'RGB' && (
             <div className="space-y-3 mb-6">
-              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setPlayerRgb({ ...playerRgb, r: v })} min={0} max={255}
+              <Slider label="Red (R)" value={playerRgb.r} onChange={v => setColor({ ...playerRgb, r: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(0,${playerRgb.g},${playerRgb.b}), rgb(255,${playerRgb.g},${playerRgb.b}))`} />
-              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setPlayerRgb({ ...playerRgb, g: v })} min={0} max={255}
+              <Slider label="Green (G)" value={playerRgb.g} onChange={v => setColor({ ...playerRgb, g: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${playerRgb.r},0,${playerRgb.b}), rgb(${playerRgb.r},255,${playerRgb.b}))`} />
-              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setPlayerRgb({ ...playerRgb, b: v })} min={0} max={255}
+              <Slider label="Blue (B)" value={playerRgb.b} onChange={v => setColor({ ...playerRgb, b: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${playerRgb.r},${playerRgb.g},0), rgb(${playerRgb.r},${playerRgb.g},255))`} />
             </div>
           )}
@@ -2295,10 +2277,10 @@ function ColorMemoryGame() {
             const hsv = rgbToHsv(playerRgb);
             return (
               <div className="space-y-3 mb-6">
-                <Slider label="Hue" value={hsv.h} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
+                <Slider label="Hue" value={hsv.h} onChange={v => setColor(hsvToRgb({ ...hsv, h: v }))} min={0} max={360}
                   gradient="linear-gradient(to right, hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%), hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%))" />
-                <Slider label="Saturation" value={hsv.s} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
-                <Slider label="Value" value={hsv.v} onChange={v => setPlayerRgb(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
+                <Slider label="Saturation" value={hsv.s} onChange={v => setColor(hsvToRgb({ ...hsv, s: v }))} min={0} max={100} />
+                <Slider label="Value" value={hsv.v} onChange={v => setColor(hsvToRgb({ ...hsv, v: v }))} min={0} max={100} />
               </div>
             );
           })()}
