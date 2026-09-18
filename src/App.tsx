@@ -8,7 +8,7 @@ import {
   parseColor, contrastRatio, wcagLevel, isLightColor, getContrastText, wrapHue, clamp,
   getHarmony, getHarmonyAngles, getTints, getShades, getTones, HarmonyType,
   deltaEOK, deltaEToScore, getColorDifference,
-  simulateColorVision, extractDominantColors, cvDeficiencyLabels, CVDeficiency,
+  simulateColorVision, extractAllColors, cvDeficiencyLabels, CVDeficiency,
 } from './color';
 
 // ==================== SHARED COMPONENTS ====================
@@ -832,10 +832,25 @@ function PaletteLabPage() {
   const [paletteName, setPaletteName] = useState('My Palette');
   const [savedPalettes, setSavedPalettes] = useLocalStorage<Array<{ name: string; colors: RGB[] }>>('color-lab-saved-palettes', []);
   const { copy } = useCopyToClipboard();
+  const [newColorHex, setNewColorHex] = useState('#6C63FF');
+  const [newColorPicker, setNewColorPicker] = useState('#6C63FF');
 
-  const addColor = () => {
-    const randomHue = Math.random() * 360;
-    setPalette([...palette, hslToRgb({ h: randomHue, s: 70, l: 55 })]);
+  const addColor = (color?: RGB) => {
+    if (color) {
+      setPalette([...palette, color]);
+    } else {
+      const randomHue = Math.random() * 360;
+      setPalette([...palette, hslToRgb({ h: randomHue, s: 70, l: 55 })]);
+    }
+  };
+
+  const addManualColor = () => {
+    const rgb = hexToRgb(newColorHex) || hexToRgb(newColorPicker);
+    if (rgb) {
+      setPalette([...palette, rgb]);
+      setNewColorHex(rgbToHex(rgb));
+      setNewColorPicker(rgbToHex(rgb));
+    }
   };
 
   const removeColor = (i: number) => {
@@ -885,9 +900,44 @@ function PaletteLabPage() {
               className="text-lg font-semibold bg-transparent border-b border-transparent hover:border-[var(--border)] focus:border-[var(--accent)] outline-none"
               aria-label="Palette name"
             />
-            <button onClick={addColor} className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-sm">+ Add</button>
+            <button onClick={() => addColor()} className="px-3 py-1 rounded-lg bg-[var(--accent)] text-white text-sm">+ Add Random</button>
           </div>
           
+          {/* Manual Color Input */}
+          <div className="mb-4 p-3 rounded-lg bg-[var(--bg-elevated)]">
+            <h4 className="text-sm font-medium mb-2">Add Color Manually</h4>
+            <div className="flex gap-2">
+              <input
+                type="color"
+                value={newColorPicker}
+                onChange={e => {
+                  setNewColorPicker(e.target.value);
+                  setNewColorHex(e.target.value);
+                }}
+                className="w-10 h-10 rounded cursor-pointer border-0"
+                aria-label="Color picker"
+              />
+              <input
+                type="text"
+                value={newColorHex}
+                onChange={e => {
+                  setNewColorHex(e.target.value);
+                  const rgb = hexToRgb(e.target.value);
+                  if (rgb) setNewColorPicker(rgbToHex(rgb));
+                }}
+                placeholder="#RRGGBB"
+                className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border)] font-mono text-sm"
+                aria-label="Hex color value"
+              />
+              <button
+                onClick={addManualColor}
+                className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {palette.map((color, i) => (
               <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-[var(--bg-elevated)]">
@@ -994,7 +1044,7 @@ function ImagePalettePage() {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const extracted = extractDominantColors(imageData, 8);
+        const extracted = extractAllColors(imageData);
         setColors(extracted);
         setImageUrl(e.target?.result as string);
         setIsProcessing(false);
@@ -1015,16 +1065,29 @@ function ImagePalettePage() {
     if (file) processImage(file);
   };
 
+  const totalPixels = colors.reduce((sum, c) => sum + c.count, 0);
+  const [showAll, setShowAll] = useState(false);
+  const navigate = useNavigate();
+  const [savedPalette, setSavedPalette] = useLocalStorage<RGB[]>('color-lab-palette', []);
+
+  const sendToPalette = () => {
+    const topColors = colors.slice(0, 8).map(c => c.color);
+    setSavedPalette(topColors);
+    navigate('/palette');
+  };
+
+  const displayColors = showAll ? colors : colors.slice(0, 30);
+
   return (
     <div className="animate-fade-in">
-      <SectionTitle subtitle="Extract dominant colors from any image — processed locally">Image Palette Extractor</SectionTitle>
+      <SectionTitle subtitle="Extract all colors from any image — sorted by frequency, processed locally">Image Palette Extractor</SectionTitle>
       
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
           <div
             onDrop={handleDrop}
             onDragOver={e => e.preventDefault()}
-            className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:border-[var(--accent)] transition-colors cursor-pointer"
+            className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center hover:border-[var(--accent)] transition-colors cursor-pointer relative"
           >
             {imageUrl ? (
               <img src={imageUrl} alt="Uploaded" className="max-h-64 mx-auto rounded-lg" />
@@ -1047,29 +1110,52 @@ function ImagePalettePage() {
         </Card>
 
         <Card>
-          <h3 className="font-semibold mb-4">Extracted Colors {colors.length > 0 && `(${colors.length})`}</h3>
+          <h3 className="font-semibold mb-2">Extracted Colors {colors.length > 0 && `(${colors.length} unique)`}</h3>
+          {colors.length > 0 && (
+            <p className="text-xs text-[var(--text-muted)] mb-4">Total pixels analyzed: {totalPixels.toLocaleString()}</p>
+          )}
           {isProcessing && <p className="text-[var(--text-secondary)]">Processing image...</p>}
           {colors.length > 0 && (
-            <div className="space-y-3">
-              {colors.map((item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-lg flex-shrink-0" style={{ backgroundColor: rgbToHex(item.color) }} />
-                  <div className="flex-1">
-                    <span className="font-mono text-sm">{rgbToHex(item.color).toUpperCase()}</span>
-                    <div className="w-full h-2 rounded bg-[var(--bg-elevated)] mt-1">
-                      <div className="h-full rounded" style={{ width: `${(item.count / colors[0].count) * 100}%`, backgroundColor: rgbToHex(item.color) }} />
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+              {displayColors.map((item, i) => {
+                const pct = ((item.count / totalPixels) * 100);
+                return (
+                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-elevated)] transition-colors">
+                    <div className="w-10 h-10 rounded-lg flex-shrink-0 border border-[var(--border)]" style={{ backgroundColor: rgbToHex(item.color) }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm">{rgbToHex(item.color).toUpperCase()}</span>
+                        <span className="text-xs text-[var(--text-muted)]">{pct.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded bg-[var(--bg-elevated)] mt-1">
+                        <div className="h-full rounded" style={{ width: `${Math.max(pct, 0.5)}%`, backgroundColor: rgbToHex(item.color) }} />
+                      </div>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <span className="text-xs text-[var(--text-muted)] w-16 text-right font-mono">{item.count.toLocaleString()}px</span>
+                      <button onClick={() => copy(rgbToHex(item.color))} className="text-xs px-2 py-1 rounded hover:bg-[var(--border)]" aria-label="Copy hex">📋</button>
                     </div>
                   </div>
-                  <button onClick={() => copy(rgbToHex(item.color))} className="text-xs px-2 py-1 rounded hover:bg-[var(--border)]" aria-label="Copy">📋</button>
-                </div>
-              ))}
-              <div className="flex gap-2 mt-4">
-                <button onClick={() => copy(colors.map(c => rgbToHex(c.color)).join('\n'))} className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm">Copy All</button>
-              </div>
+                );
+              })}
+            </div>
+          )}
+          {colors.length > 30 && (
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="mt-3 w-full py-2 rounded-lg bg-[var(--bg-elevated)] text-sm text-[var(--text-secondary)] hover:bg-[var(--border)] transition-colors"
+            >
+              {showAll ? `Show top 30` : `Show all ${colors.length} colors`}
+            </button>
+          )}
+          {colors.length > 0 && (
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => copy(colors.map(c => rgbToHex(c.color)).join('\n'))} className="px-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm hover:bg-[var(--border)]">Copy All HEX</button>
+              <button onClick={sendToPalette} className="px-3 py-2 rounded-lg bg-[var(--accent)] text-white text-sm">Send Top 8 to Palette →</button>
             </div>
           )}
           {colors.length === 0 && !isProcessing && (
-            <p className="text-[var(--text-muted)]">Upload an image to extract its dominant colors.</p>
+            <p className="text-[var(--text-muted)]">Upload an image to extract all its colors, sorted by frequency.</p>
           )}
         </Card>
       </div>
