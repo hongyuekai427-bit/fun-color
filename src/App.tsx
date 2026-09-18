@@ -398,29 +398,39 @@ function ColorLabPage() {
   const [mode, setMode] = useState<LabMode>('HSL');
   const { copy, copied } = useCopyToClipboard();
 
-  const syncFromRgb = (newRgb: RGB) => {
+  // Update RGB display only, keep other models independent
+  const updateDisplayFromRgb = (newRgb: RGB) => {
     setRgb(newRgb);
     setHex(rgbToHex(newRgb));
-    setHsl(rgbToHsl(newRgb));
-    setHsv(rgbToHsv(newRgb));
-    setOklch(rgbToOklch(newRgb));
   };
 
   const updateFromHex = (newHex: string) => {
     const parsed = hexToRgb(newHex);
     if (!parsed) return;
-    syncFromRgb(parsed);
+    setRgb(parsed);
+    setHex(newHex);
+    // Update other models for display, but they maintain their own values
+    setHsl(rgbToHsl(parsed));
+    setHsv(rgbToHsv(parsed));
+    setOklch(rgbToOklch(parsed));
   };
 
-  const updateFromHsl = (newHsl: HSL) => syncFromRgb(hslToRgb(newHsl));
-  const updateFromHsv = (newHsv: HSV) => syncFromRgb(hsvToRgb(newHsv));
+  // HSL sliders only update HSL and RGB display
+  const updateFromHsl = (newHsl: HSL) => {
+    setHsl(newHsl);
+    updateDisplayFromRgb(hslToRgb(newHsl));
+  };
+
+  // HSV sliders only update HSV and RGB display
+  const updateFromHsv = (newHsv: HSV) => {
+    setHsv(newHsv);
+    updateDisplayFromRgb(hsvToRgb(newHsv));
+  };
+
   const updateFromOklch = (newOklch: OKLCH) => {
     const newRgb = oklchToRgb(newOklch);
     setOklch(newOklch);
-    setRgb(newRgb);
-    setHex(rgbToHex(newRgb));
-    setHsl(rgbToHsl(newRgb));
-    setHsv(rgbToHsv(newRgb));
+    updateDisplayFromRgb(newRgb);
   };
 
   return (
@@ -478,18 +488,18 @@ function ColorLabPage() {
 
           {mode === 'RGB' && (
             <div className="space-y-3">
-              <Slider label="Red (R)" value={rgb.r} onChange={v => syncFromRgb({ ...rgb, r: v })} min={0} max={255}
+              <Slider label="Red (R)" value={rgb.r} onChange={v => updateDisplayFromRgb({ ...rgb, r: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(0,${rgb.g},${rgb.b}), rgb(255,${rgb.g},${rgb.b}))`} />
-              <Slider label="Green (G)" value={rgb.g} onChange={v => syncFromRgb({ ...rgb, g: v })} min={0} max={255}
+              <Slider label="Green (G)" value={rgb.g} onChange={v => updateDisplayFromRgb({ ...rgb, g: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${rgb.r},0,${rgb.b}), rgb(${rgb.r},255,${rgb.b}))`} />
-              <Slider label="Blue (B)" value={rgb.b} onChange={v => syncFromRgb({ ...rgb, b: v })} min={0} max={255}
+              <Slider label="Blue (B)" value={rgb.b} onChange={v => updateDisplayFromRgb({ ...rgb, b: v })} min={0} max={255}
                 gradient={`linear-gradient(to right, rgb(${rgb.r},${rgb.g},0), rgb(${rgb.r},${rgb.g},255))`} />
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {(['r', 'g', 'b'] as const).map(ch => (
                   <div key={ch}>
                     <label className="text-xs text-[var(--text-muted)] uppercase">{ch}</label>
                     <input type="number" min={0} max={255} value={rgb[ch]}
-                      onChange={e => syncFromRgb({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
+                      onChange={e => updateDisplayFromRgb({ ...rgb, [ch]: clamp(parseInt(e.target.value) || 0, 0, 255) })}
                       className="w-full px-2 py-1 rounded bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
                       aria-label={`${ch} channel`} />
                   </div>
