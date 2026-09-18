@@ -1484,18 +1484,25 @@ function ColorSciencePage() {
               <div>
                 <h3 className="text-xl font-bold mb-3">Additive Color (RGB)</h3>
                 <p className="text-[var(--text-secondary)] mb-4">Additive color mixing starts with darkness and adds light. Red + Green + Blue light at full intensity produces white. This is how screens work — each pixel emits combinations of red, green, and blue light.</p>
-                <div className="flex gap-4 justify-center my-6">
-                  <div className="w-20 h-20 rounded-full bg-red-500 mix-blend-screen" />
-                  <div className="w-20 h-20 rounded-full bg-green-500 mix-blend-screen -ml-6" />
-                  <div className="w-20 h-20 rounded-full bg-blue-500 mix-blend-screen -ml-6" />
+                <div className="relative w-64 h-64 mx-auto my-6 bg-black rounded-xl overflow-hidden">
+                  <div className="absolute w-32 h-32 rounded-full bg-red-500 mix-blend-screen" style={{ top: '10%', left: '50%', transform: 'translateX(-50%)' }} />
+                  <div className="absolute w-32 h-32 rounded-full bg-green-500 mix-blend-screen" style={{ bottom: '10%', left: '15%' }} />
+                  <div className="absolute w-32 h-32 rounded-full bg-blue-500 mix-blend-screen" style={{ bottom: '10%', right: '15%' }} />
                 </div>
+                <p className="text-xs text-[var(--text-muted)] text-center">Red + Green + Blue light = White (on dark background)</p>
               </div>
             )}
             {activeTopic === 'subtractive' && (
               <div>
                 <h3 className="text-xl font-bold mb-3">Subtractive Color (CMY/CMYK)</h3>
                 <p className="text-[var(--text-secondary)] mb-4">Subtractive color mixing starts with white (paper) and absorbs light. Cyan + Magenta + Yellow inks at full coverage theoretically produce black (in practice, a dedicated K/black ink is added). This is how printing works.</p>
-                <p className="text-[var(--text-secondary)]">CMYK is used for print because it more efficiently produces dark colors and reduces ink usage.</p>
+                <div className="relative w-64 h-64 mx-auto my-6 bg-white rounded-xl overflow-hidden border border-[var(--border)]">
+                  <div className="absolute w-32 h-32 rounded-full mix-blend-multiply" style={{ top: '10%', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#00bcd4' }} />
+                  <div className="absolute w-32 h-32 rounded-full mix-blend-multiply" style={{ bottom: '10%', left: '15%', backgroundColor: '#e91e63' }} />
+                  <div className="absolute w-32 h-32 rounded-full mix-blend-multiply" style={{ bottom: '10%', right: '15%', backgroundColor: '#ffeb3b' }} />
+                </div>
+                <p className="text-xs text-[var(--text-muted)] text-center">Cyan + Magenta + Yellow ink = Black (on white paper)</p>
+                <p className="text-[var(--text-secondary)] mt-4">CMYK is used for print because it more efficiently produces dark colors and reduces ink usage.</p>
               </div>
             )}
             {activeTopic === 'models' && (
