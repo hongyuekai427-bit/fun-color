@@ -467,9 +467,8 @@ function ColorLabPage() {
                 value={hex}
                 onChange={e => {
                   const val = e.target.value;
-                  setHex(val);
-                  const parsed = hexToRgb(val.startsWith('#') ? val : '#' + val);
-                  if (parsed) syncFromRgb(parsed);
+                  const hexVal = val.startsWith('#') ? val : '#' + val;
+                  updateFromHex(hexVal);
                 }}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] font-mono text-sm"
                 aria-label="Hex color value"
